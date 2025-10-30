@@ -1,11 +1,12 @@
-import React, { useState, useMemo, useCallback, Suspense } from 'react';
-import { salesData, MENU_ITEMS } from './data';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { MENU_BY_CATEGORY, MENU_CATEGORIES } from './data';
 import { TAX_RATE, INVOICE_ID_PREFIX } from './constants';
 import Menu from './components/Menu';
 import OrderSummary from './components/OrderSummary';
-const ReceiptModal = React.lazy(() => import('./components/ReceiptModal'));
+const ReceiptModal = lazy(() => import('./components/ReceiptModal'));
 import Toast from './components/Toast';
 import { useToast } from './hooks';
+import { calculateTotals } from './utils';
 
 const App = () => {
   const [order, setOrder] = useState([]);
@@ -14,15 +15,9 @@ const App = () => {
   const [finalizedTotals, setFinalizedTotals] = useState({ subtotal: 0, tax: 0, total: 0 });
   const [invoiceId, setInvoiceId] = useState('');
   
-  // Themeing removed to reduce LOC
   const { toasts, showToast } = useToast();
 
-  const orderTotals = useMemo(() => {
-    const subtotal = order.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    const tax = subtotal * TAX_RATE;
-    const total = subtotal + tax;
-    return { subtotal, tax, total };
-  }, [order]);
+  const orderTotals = useMemo(() => calculateTotals(order, TAX_RATE), [order]);
 
   const handleAddItem = useCallback(item => {
     setOrder(prevOrder => {
@@ -36,33 +31,18 @@ const App = () => {
       }
       return [...prevOrder, { ...item, quantity: 1 }];
     });
-    showToast(
-        <>
-            Added <span className="font-semibold">{item.name}</span> to order.
-        </>,
-        'success'
-    );
+    showToast(`Added ${item.name} to order.`, 'success');
   }, [showToast]);
 
   const handleUpdateQuantity = useCallback((itemId, newQuantity) => {
-    const quantity = Math.floor(newQuantity);
-
-    if (!isFinite(quantity)) {
-      console.error("Invalid quantity update attempted:", newQuantity);
-      return; 
-    }
-
-    if (quantity <= 0) {
-      setOrder(prevOrder => prevOrder.filter(item => item.id !== itemId));
-    } else {
-      setOrder(prevOrder =>
-        prevOrder.map(item =>
-          item.id === itemId ? { ...item, quantity } : item
-        )
-      );
-    }
+    const quantity = Number.isFinite(newQuantity) ? Math.max(0, Math.floor(newQuantity)) : 0;
+    setOrder(prev =>
+      quantity
+        ? prev.map(item => (item.id === itemId ? { ...item, quantity } : item))
+        : prev.filter(item => item.id !== itemId)
+    );
   }, []);
-  
+
   const handleClearOrder = useCallback(() => {
     setOrder([]);
     showToast('Order cleared.', 'info');
@@ -81,25 +61,6 @@ const App = () => {
     setIsReceiptVisible(false);
   }, []);
 
-  const menuByCategory = useMemo(() => {
-     const itemSalesCount = salesData.reduce((acc, sale) => {
-        acc[sale.itemName] = (acc[sale.itemName] || 0) + sale.quantity;
-        return acc;
-    }, {});
-
-    const sortedMenuItems = [...MENU_ITEMS].sort((a, b) => {
-        return (itemSalesCount[b.name] || 0) - (itemSalesCount[a.name] || 0);
-    });
-
-    return sortedMenuItems.reduce((acc, item) => {
-      if (!acc[item.category]) {
-        acc[item.category] = [];
-      }
-      acc[item.category].push(item);
-      return acc;
-    }, {});
-  }, []);
-
   return (
     <div className="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans transition-colors duration-300">
       <header className="bg-white dark:bg-gray-800 shadow-md transition-colors duration-300 sticky top-0 z-10 print:hidden">
@@ -112,7 +73,11 @@ const App = () => {
       <main className="container mx-auto px-6 py-8 print:hidden">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-            <Menu menuByCategory={menuByCategory} onAddItem={handleAddItem} />
+            <Menu
+              menuByCategory={MENU_BY_CATEGORY}
+              categories={MENU_CATEGORIES}
+              onAddItem={handleAddItem}
+            />
           </div>
           <div>
             <OrderSummary
