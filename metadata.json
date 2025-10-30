@@ -1,0 +1,5 @@
+{
+  "name": "Cafe Billing System",
+  "description": "A modern, intuitive billing system software for a cafe. It allows staff to easily select items from a categorized menu, generate an itemized bill with tax calculations, and produce a final receipt.",
+  "requestFramePermissions": []
+}
